@@ -1,0 +1,456 @@
+# This is a text file containing all of the classes and functions that are used #
+# in the computations in the paper "Stationary Descendents and the Discriminant #
+# Modular Form". To use the classes/functions, you will need to copy all of     #
+# them inside a Sage environment. If things do not appear to be working, you    #
+# can also go through the accompany Jupyter Notebook, found at the author's     #
+# website: https://sites.google.com/view/adamafandi                             #
+
+from itertools import *
+R.<q> = QQ[]
+
+def centralizer(mu):
+    ### Takes a partition $\mu$ of $d$ and returns  ###
+    ### the order of the centralizer corresponding  ###
+    ### to $\mu$.
+    
+    if mu == []: # Returns 1 if $\mu$ is the empty partition
+        return 1
+    
+    m = max(mu) # Don't need to check for multiplicities past the max entry of \mu 
+    
+    multiplicity_counter = [] # Instantiate the list of multiplicities
+    
+    for i in range(1, m + 1): # Creates the list [m_1, m_2, ...]
+        multiplicity_of_i = 0
+        for j in mu:
+            if j == i:
+                multiplicity_of_i += 1
+        multiplicity_counter.append(multiplicity_of_i)
+        
+    first_factor = 1
+    
+    for i in multiplicity_counter: # Creates the product of factorials of multiplicities
+        first_factor *= factorial(i)
+    
+    second_factor = 1
+    
+    for i in mu: # Creates the product of parts of \mu 
+        second_factor *= i
+        
+    return first_factor*second_factor
+
+
+def reduce(shape, s):
+    th_list = [] # list of (𝜆∖𝑟, ℎ(𝑟)) pairs
+    
+    border_size = [] # list containing number of border cells in every row
+    for r in range(len(shape)):
+        border_size.append(shape[r] if r == len(shape) - 1
+                           else shape[r] - shape[r + 1] + 1)
+    
+    for r_start_idx in range(len(shape)):
+        new_shape = shape.copy()
+        
+        removed = 0 # number of removed border cells
+        r_idx = r_start_idx # index of row from which to remove cells
+        while removed < s and r_idx < len(shape):
+            rrem = min(border_size[r_idx], s - removed) # number of cells to remove from row at rem_idx
+            new_shape[r_idx] -= rrem # remove cells from shape
+            
+            removed += rrem
+            r_idx += 1
+        
+        # check that shape is valid and that exactly s cells have been removed
+        if removed != s or (r_idx < len(shape) and new_shape[r_idx - 1] < new_shape[r_idx]):
+            continue
+        else:
+            # remove 0s from new shape
+            new_shape = list(filter(lambda x: x != 0, new_shape))
+            th_list.append((new_shape, r_idx - r_start_idx - 1))
+    
+    return th_list
+
+memo = {}
+
+def character(lda, mu, idx=0, print_flag=False):
+    key = (tuple(lda), tuple(mu)) # to index into memo
+    
+    if key in memo: # return from memo if already computed
+        if print_flag:
+            print("\t\t"*(idx + 1) + "returns ", memo[key], "from memo")
+        return memo[key]
+    
+    if idx == 0 and print_flag:
+        print_tableau(lda)
+    if len(lda) == 0 and idx == len(mu):
+        if print_flag:
+            print("\t\t"*(idx + 1) + "⊥")
+            print("\t\t"*(idx + 1) + "returns 1")
+        return 1
+    
+    th_list = reduce(lda, mu[idx])
+    char = 0
+    
+    for t, h in th_list:
+        if print_flag:
+            print_red_tableau(lda, t, tab="\t\t"*(idx + 1))
+        
+        ind = -1 if h % 2 == 1 else 1
+        char_t = character(t, mu, idx + 1, print_flag)
+        char += ind * char_t
+    
+        if print_flag:
+            print("\t\t"*(idx + 1) + "returns ", char_t)
+    
+    memo[key] = char
+    return char
+
+
+def shifted_symmetric(lmd, k):
+    ### Takes a partition $\lmd$ of $d$, and an integer $k$, ### 
+    ### and returns p_k(\lambda)                             ###
+    
+    if k <= 0:
+        return 0
+    else:
+        bernoulli_term = (1 - 2^(-k))*((-1)^k)*(1/(k + 1))*bernoulli(k + 1)
+        s = 0
+        for i in range(1, len(lmd) + 1):
+            s += (lmd[i - 1] - i + (1/2))^(k) - (-i + (1/2))^(k)
+        return s + bernoulli_term
+    
+
+def product_shifted_symmetric(k, lmd):
+    ### Takes a partition $\lmd$ of $d$, and a list [k_1, \ldots, k_n] ###
+    ### of integers, and returns \prod_{i = 1}^n p_{k_i + 1}(\lmd)     ###
+    
+    p = 1
+    
+    for i in k:
+        p *= shifted_symmetric(lmd, i + 1)
+        
+    return p
+
+
+def descendent(k, d):
+    ### Takes a list $[k_1, \ldots, k_n]$ and a degree $d$, and returns          ###  
+    ### the Gromov-Witten invariant <\tau_{k_1}\ldots\tau_{k_n}> ^{\cdot E}_{d}  ###
+    
+    summation = 0
+    
+    outside_factor = 1
+    
+    for i in k:
+        outside_factor *= (1/factorial(i + 1)) #Create \prod_{i = 1}^n\frac{1}{(k_i + 1)!}
+    
+    for i in product(Partitions(d), Partitions(d)): #Sum over through \lambda, \mu \vdash d
+        lmd = list(i[0])
+        mu = list(i[1])
+        summation += (1/centralizer(mu))*((character(lmd, mu))^2)*product_shifted_symmetric(k, lmd)
+        
+    return outside_factor*summation
+
+
+def eisenstein(weight, order):
+    ### Returns the Eisenstein series of weight $k$ up to order $n$ ###
+    
+    if order == 0:
+        return -bernoulli(weight)/(2*(weight))
+    else:
+        s = -bernoulli(weight)/(2*weight)
+        for n in range(1, order + 1):
+            s += sigma(n, weight - 1)*q^n
+        return s
+
+def truncate(f, n):
+    ### Auxiliary helper function, takes a polynomial f(q) and truncates to order n ###
+    s = 0
+    for i in range(n + 1):
+        s += f[i]*q^i
+    return s
+
+
+class Eisenstein_Basis:
+    ### Eisenstein basis class for quasimodular forms of weight $k$ ###
+    
+    def __init__(self, weight=2):
+        self.weight = weight
+        self.dimension = len(Partitions((self.weight/2).floor(), max_part=3)) #Keeps track of dimension of QM_k
+
+    def __repr__(self):
+        return f"The Eisenstein basis of quasimodular forms of weight {self.weight}"
+    
+    
+    def display(self):
+        #Returns the dictionary {(i_1, i_2, ...):E_{i_1}E_{i_2}...}#
+        basis = {}
+        for i in Partitions((self.weight/2).floor(), max_part=3):
+            basis_vector = 1
+            for j in i:
+                basis_vector *= eisenstein(2*j, self.dimension - 1)
+            basis[tuple(2*k for k in i)] = truncate(basis_vector, self.dimension - 1)
+        return basis
+    
+    
+    def to_matrix(self):
+        # Returns the square matrix a_{ij} = ith coefficient of the jth basis vector #
+        m = []
+        for basis_vector in self.display():
+            m.append([i for i in self.display()[basis_vector]])
+        return Matrix(m).transpose()
+
+
+class Stationary_Descendent:
+    ### The stationary descendent class, allows one to access individual intersection numbers ###
+    ### and their generating polynomials ###
+    
+    def __init__(self, insertions=[0]):
+        self.insertions = insertions
+        self.weight = sum(self.insertions) + 2*len(self.insertions)
+        
+    def __repr__(self):
+        return f"Stationary descendent class with insertions {self.insertions}, and weight {self.weight}" 
+    
+    def evaluate(self, d = 0):
+        ### Returns the individual intersection number $<\tau_{k_1}\ldots\tau_{k_n}>^{\bullet E}_d$ ###
+        return descendent(self.insertions, d)
+        
+    def expand(self, order = 0):
+        ### Returns the generating function $<\tau_{k_1}\ldots\tau_{k_n}>$ up to the prescribed order ###
+        
+        if order == 0:
+            return descendent(self.insertions, 0)
+        
+        euler = 1
+        descendent_summation = 0
+        
+        for i in range(1, order + 1):
+            euler *= (1 - q^i)
+        
+        euler = truncate(euler, order)
+    
+        for d in range(order + 1):
+            descendent_summation += descendent(self.insertions, d)*q^d
+            
+        return truncate(euler*descendent_summation, order)
+    
+    def to_eisenstein_basis(self):
+        ### Returns the stationary descendent in terms of the eisenstein basis ###
+        
+        target_vector = vector([i for i in self.expand(Eisenstein_Basis(self.weight).dimension - 1)]) #The descendent is uniquely determined by the first $\text{QM}_k$ coefficien
+        
+        matrix = Eisenstein_Basis(self.weight).to_matrix()
+        
+        solution_vector = matrix.solve_right(target_vector)
+        
+        solution_dict = {}
+        
+        counter = 0
+        
+        for i in Eisenstein_Basis(self.weight).display():
+            solution_dict[i] = solution_vector[counter]
+            counter += 1
+        
+        return solution_dict
+    
+    
+class Descendent_Basis:
+    ### The descendent basis class of weight $k$. ###
+    
+    def __init__(self, weight = 2, typ = 1):
+        self.weight = weight
+        self.type = typ
+        self.dimension = len(Partitions((self.weight/2).floor(), max_part=3))
+        
+        
+    def __repr__(self):
+        return f"The descendent basis in weight {self.weight} and type {self.type}"
+    
+    
+    def display(self):
+        
+        types = {}
+        
+        types[1] = [[0], [0, 0], [0, 0, 0]]
+        types[2] = [[0], [0, 0], [1, 1]]
+        types[3] = [[0], [0, 0], [2, 0]]
+        types[4] = [[0], [0, 0], [4]]
+        types[5] = [[0], [2], [0, 0, 0]]
+        types[6] = [[0], [2], [1, 1]]
+        types[7] = [[0], [2], [2, 0]]
+        types[8] = [[0], [2], [4]]
+            
+        basis = {}
+            
+        for i in Partitions((self.weight/2).floor(), max_part=3):
+            basis_key = []
+            for j in i:
+                basis_key.append(tuple(types[self.type][j - 1]))
+            basis_key = tuple(basis_key)
+            basis_vector = 1
+            for j in i:
+                basis_vector *= Stationary_Descendent(types[self.type][j - 1]).expand(self.dimension - 1)
+            basis[basis_key] = truncate(basis_vector, self.dimension - 1)
+        
+        return basis
+    
+    
+    def to_matrix(self):
+        # Returns the square matrix a_{ij} = ith coefficient of the jth basis vector #
+        m = []
+        for basis_vector in self.display():
+            m.append([i for i in self.display()[basis_vector]])
+        return Matrix(m).transpose()
+    
+    
+    def expand(self, coef = [-1/24]):
+        ### Takes a list a_1, \ldots, a_d of d rational numbers, where d is the dimension of QM_k          ###
+        ### and returns the quasimodular form, in the                                                      ###
+        ### descendent basis, whose first d coefficients are a_1, \ldots, a_d                              ###
+        
+        expansion = {}
+        
+        if len(coef) != Eisenstein_Basis(self.weight).dimension:
+            return False
+        
+        M = self.to_matrix()
+        X = M.solve_right(vector(coef))
+        
+        counter = 0
+        for basis_vector in self.display():
+            expansion[basis_vector] = X[counter]
+            counter += 1
+        
+        return expansion
+    
+    
+class Descendent_Matroid:
+    
+    def __init__(self, weight = 2):
+        self.weight = weight
+        
+    def __repr__(self):
+        return f"The descendent matroid class of weight {self.weight}"
+    
+    def groundset(self, positive = False, nonpositive = False):
+        # Returns the ground set of the descendent matroid of weight k #
+        
+        s = [] #Create the list that eventually holds the ground set
+        
+        #One pointed invariants --> partitions of weight-2 with at most 1 part
+        #Two pointed invariants --> partitions of weight-4 with at most 2 parts
+        #...
+        #(weight/2) pointed invariants --> partitions of 0 with at most weight/2 parts
+        
+        if positive == False and nonpositive == False:
+            for i in range(1, (self.weight/2).floor() + 1): #loop through "with at most __ parts"
+                for p in Partitions(self.weight - 2*i, max_length = i).list():
+                    l = list(p)
+                    if len(p) != i: #Throw in zeroes so that the descendent has exactly the right amount of points
+                        for j in range(1, i - len(p) + 1):
+                            l.append(0)
+                        s.append(l)
+                    else:
+                        s.append(l)
+            return s
+        
+        if positive == True and nonpositive == False:
+            for desc in self.groundset():
+                if all([v > 0 for v in desc]):
+                    s.append(desc)
+            return s
+        
+        if nonpositive == True and positive == False:
+            for desc in self.groundset():
+                if all([v > 0 for v in desc]) == False:
+                    s.append(desc)
+            return s
+    
+    
+    def matrix_repr(self, positive = False, nonpositive = False):
+        # Returns the matrix A, whose columns correspond to the groundset, and  #
+        # each column represents the descendent written in the Eisenstein basis # 
+        # By default
+        
+        m = []
+        
+        if positive == False and nonpositive == False:
+            for desc in self.groundset():
+                column = []
+                f = Stationary_Descendent(desc).to_eisenstein_basis()
+                for basis_vector in f:
+                    column.append(f[basis_vector])
+                m.append(column)
+        
+            M = Matrix(m).transpose()
+        
+            return M
+        
+        if positive == True and nonpositive == False:
+            for desc in self.groundset(positive = True):
+                column = []
+                f = Stationary_Descendent(desc).to_eisenstein_basis()
+                for basis_vector in f:
+                    column.append(f[basis_vector])
+                m.append(column)
+        
+            M = Matrix(m).transpose()
+        
+            return M
+        
+        if nonpositive == True and positive == False:
+            for desc in self.groundset(nonpositive = True):
+                column = []
+                f = Stationary_Descendent(desc).to_eisenstein_basis()
+                for basis_vector in f:
+                    column.append(f[basis_vector])
+                m.append(column)
+        
+            M = Matrix(m).transpose()
+        
+            return M
+        
+        
+    
+    def matroid_repr(self, positive = False, nonpositive = False):
+        # Returns the matroid class ##
+        
+        if positive == False and nonpositive == False:
+            mat = Matroid(self.matrix_repr())
+            return mat
+        
+        if positive == True and nonpositive == False:
+            mat = Matroid(self.matrix_repr(positive = True))
+            return mat
+        
+        if nonpositive == True and positive == False:
+            mat = Matroid(self.matrix_repr(nonpositive = True))
+            return mat
+    
+    def bases(self, positive = False, nonpositive = False):
+        # Returns the bases of the descendent matroid #
+        set_of_bases = []
+        
+        if positive == False and nonpositive == False:
+            for b in self.matroid_repr().bases():
+                basis = []
+                for index in b:
+                    basis.append(self.groundset()[index])
+                set_of_bases.append(basis)
+            return iter(set_of_bases)
+        
+        if positive == True and nonpositive == False:
+            for b in self.matroid_repr(positive = True).bases():
+                basis = []
+                for index in b:
+                    basis.append(self.groundset(positive = True)[index])
+                set_of_bases.append(basis)
+            return iter(set_of_bases)
+        
+        if nonpositive == True and positive == False:
+            for b in self.matroid_repr(nonpositive = True).bases():
+                basis = []
+                for index in b:
+                    basis.append(self.groundset(nonpositive = True)[index])
+                set_of_bases.append(basis)
+            return iter(set_of_bases)
