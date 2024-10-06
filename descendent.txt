@@ -2,8 +2,7 @@
 # in the computations in the paper "Stationary Descendents and the Discriminant #
 # Modular Form". To use the classes/functions, you will need to copy all of     #
 # them inside a Sage environment. If things do not appear to be working, you    #
-# can also go through the accompanying Jupyter Notebook, found at the author's     #
-# website: https://sites.google.com/view/adamafandi                             #
+# can also go through the accompanying Jupyter Notebook.                        #
 
 from itertools import *
 R.<q> = QQ[]
