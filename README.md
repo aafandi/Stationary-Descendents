@@ -2,7 +2,7 @@ This is a collection of classes and functions that aid in the computation of
 (disconnected) stationary descendent integrals to a target elliptic curve. It was used 
 to generate the results in the following preprint:
 
-Stationary Descendents and the Discriminant Modular Form
+Stationary Descendents and the Discriminant Modular Form  \n
 https://arxiv.org/abs/2308.14198
 
 The classes and functions are written in Sage/Python, so the user will need an installation of 
