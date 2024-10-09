@@ -8,4 +8,4 @@ https://arxiv.org/abs/2308.14198
 The classes and functions are written in Sage/Python, so the user will need an installation of 
 Sage in order to run the code locally. Once this is done, one can either copy and paste the code
 in the .txt file to work with the code, or run the accompanying Jupyter Notebook (I'd reccomend 
-the latter choice, since it will also provivde the mathematical explanation/motivation of the code).
+the latter choice, since it will also provide the mathematical explanation/motivation of the code).
